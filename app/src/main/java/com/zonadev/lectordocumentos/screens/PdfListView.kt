@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -41,11 +42,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.zonadev.lectordocumentos.model.PdfItem
 import com.zonadev.lectordocumentos.utils.PermissionHelper
 import kotlinx.coroutines.delay
-
+import java.io.File
 
 
 @Composable
@@ -101,14 +103,38 @@ fun PdfAppEntry(appContext: Context) {
             presenter.requestManageAllFiles()
         },
         onOpenPdf = { uri ->
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/pdf")
-                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+
+            // 1️⃣ Convertir file:// a content:// usando FileProvider
+            val realUri = if (uri.scheme == "file") {
+                val file = File(uri.path!!)
+                FileProvider.getUriForFile(
+                    appContext,
+                    "${appContext.packageName}.provider",
+                    file
+                )
+            } else {
+                uri
             }
+
+            // 2️⃣ Intent normal
+            val baseIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(realUri, "application/pdf")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            // 3️⃣ Forzar que **siempre** aparezca el menú de apps
+            val chooser = Intent.createChooser(baseIntent, "Abrir PDF con…").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
             try {
-                appContext.startActivity(intent)
-            } catch (_: Exception) {}
+                appContext.startActivity(chooser)
+            } catch (e: Exception) {
+                Toast.makeText(appContext, "No hay apps para abrir PDF", Toast.LENGTH_LONG).show()
+            }
         }
+
+
     )
 }
 

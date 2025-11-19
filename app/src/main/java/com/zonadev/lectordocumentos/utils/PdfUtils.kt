@@ -54,3 +54,18 @@ object PermissionHelper {
         }
     }
 }
+
+
+object PdfUtils {
+    fun getRealPathFromUri(context: Context, uri: Uri): String? {
+        val projection = arrayOf(MediaStore.Files.FileColumns.DATA)
+        context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            val columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA)
+            if (cursor.moveToFirst()) {
+                return cursor.getString(columnIndex)
+            }
+        }
+        return null
+    }
+}
+
