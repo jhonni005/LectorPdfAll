@@ -41,7 +41,14 @@ android {
 
 dependencies {
 
-  //  implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+    //implementation("com.github.mhiew:PdfiumAndroid:1.9.1")
+    //implementation ("com.github.barteksc:pdfium-android:1.9.0")
+
+    implementation("io.legere:pdfiumandroid:1.0.35")
+
+
+
+    //  implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
     // Jetpack Compose Navigation
     implementation("androidx.navigation:navigation-compose:2.8.0")

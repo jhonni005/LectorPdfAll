@@ -37,9 +37,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.rememberNavController
 import com.zonadev.lectordocumentos.screens.PdfAppEntry
 
 import com.zonadev.lectordocumentos.ui.theme.LectorDocumentosTheme
+import com.zonadev.navigation.AppNavHost
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,8 +49,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             LectorDocumentosTheme {
+                val navController = rememberNavController()
                 Surface(modifier = Modifier) {
-                    PdfAppEntry(applicationContext)
+                  //  PdfAppEntry
+                    AppNavHost(navController = navController, appContext = applicationContext)
                 }
             }
         }

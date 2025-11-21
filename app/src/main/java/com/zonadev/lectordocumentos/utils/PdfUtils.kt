@@ -3,14 +3,24 @@ package com.zonadev.lectordocumentos.utils
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Matrix
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
+import android.util.LruCache
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.core.graphics.createBitmap
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.math.roundToInt
 
 object PermissionHelper {
 
@@ -54,18 +64,62 @@ object PermissionHelper {
         }
     }
 }
+suspend fun renderPdfPage(
+    renderer: PdfRenderer,
+    index: Int,
+    mutex: Mutex // 🔥 Necesario para evitar colisiones
+): Bitmap? {
+    return withContext(Dispatchers.IO) {
+        // Usamos mutex para asegurar que solo UN hilo toque el PdfRenderer a la vez
+        mutex.withLock {
+            if (index >= renderer.pageCount) return@withLock null
 
+            var page: PdfRenderer.Page? = null
+            try {
+                page = renderer.openPage(index)
 
-object PdfUtils {
-    fun getRealPathFromUri(context: Context, uri: Uri): String? {
-        val projection = arrayOf(MediaStore.Files.FileColumns.DATA)
-        context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-            val columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA)
-            if (cursor.moveToFirst()) {
-                return cursor.getString(columnIndex)
+                // Configuración para ahorrar memoria (50% menos que ARGB_8888)
+                val bitmapConfig = Bitmap.Config.RGB_565
+
+                val maxWidth = 900 // Ancho objetivo
+                val scale = maxWidth.toFloat() / page.width
+                val width = maxWidth
+                val height = (page.height * scale).roundToInt()
+
+                // Crear bitmap optimizado
+                val bitmap = createBitmap(width, height, bitmapConfig)
+
+                val matrix = Matrix().apply {
+                    postScale(scale, scale)
+                }
+
+                page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                bitmap
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null // Retornar null si falla, para manejarlo en la UI
+            } finally {
+                page?.close() // 🔥 CRÍTICO: Siempre cerrar la página
             }
         }
-        return null
     }
 }
 
+class BitmapCache(private val maxSize: Int) {
+    private val map = LinkedHashMap<Int, Bitmap>(0, 0.75f, true)
+
+    fun get(index: Int): Bitmap? = map[index]
+
+    fun put(index: Int, bmp: Bitmap) {
+        map[index] = bmp
+        if (map.size > maxSize) {
+            val iterator = map.entries.iterator()
+            val oldest = iterator.next()
+            iterator.remove()
+
+            // ❌ NO RECICLAR, PdfRenderer puede seguir usándolo
+            // oldest.value.recycle()  <- JAMÁS HACER ESTO
+        }
+    }
+}

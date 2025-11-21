@@ -46,12 +46,13 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.zonadev.lectordocumentos.model.PdfItem
 import com.zonadev.lectordocumentos.utils.PermissionHelper
-import kotlinx.coroutines.delay
 import java.io.File
 
-
 @Composable
-fun PdfAppEntry(appContext: Context) {
+fun PdfAppEntry(
+    appContext: Context,
+    onOpenPdf: (Uri) -> Unit
+) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val presenter = remember { PdfListPresenter(appContext) }
 
@@ -59,6 +60,7 @@ fun PdfAppEntry(appContext: Context) {
     val (pdfs, setPdfs) = remember { mutableStateOf<List<PdfItem>>(emptyList()) }
     val (needsPermission, setNeedsPermission) = remember { mutableStateOf(false) }
 
+    // Conecta con el presenter
     DisposableEffect(lifecycleOwner) {
         val viewImpl = object : PdfListPresenter.View {
             override fun showLoading() {
@@ -78,63 +80,33 @@ fun PdfAppEntry(appContext: Context) {
                 setPdfs(emptyList())
             }
         }
+
         presenter.attach(viewImpl)
         onDispose { presenter.detach() }
     }
 
-    // ✅ Verifica permiso solo al iniciar
-    //no se ejecuta en huawei
+    // Ejecutar una sola vez al iniciar
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         if (PermissionHelper.hasManageAllFiles(context)) {
             presenter.refresh()
         } else {
-         setNeedsPermission(true)
+            setNeedsPermission(true)
             setPdfs(emptyList())
         }
     }
 
+    // Pantalla de lista
     PdfListScreen(
         isLoading = isLoading,
         pdfs = pdfs,
         needsPermission = needsPermission,
         onRefresh = { presenter.refresh() },
-        onEnableManageAllFiles = {
-            presenter.requestManageAllFiles()
-        },
+        onEnableManageAllFiles = { presenter.requestManageAllFiles() },
         onOpenPdf = { uri ->
-
-            // 1️⃣ Convertir file:// a content:// usando FileProvider
-            val realUri = if (uri.scheme == "file") {
-                val file = File(uri.path!!)
-                FileProvider.getUriForFile(
-                    appContext,
-                    "${appContext.packageName}.provider",
-                    file
-                )
-            } else {
-                uri
-            }
-
-            // 2️⃣ Intent normal
-            val baseIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(realUri, "application/pdf")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-
-            // 3️⃣ Forzar que **siempre** aparezca el menú de apps
-            val chooser = Intent.createChooser(baseIntent, "Abrir PDF con…").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-
-            try {
-                appContext.startActivity(chooser)
-            } catch (e: Exception) {
-                Toast.makeText(appContext, "No hay apps para abrir PDF", Toast.LENGTH_LONG).show()
-            }
+            // ✅ Llamar al lambda del NavHost para abrir el visor interno
+            onOpenPdf(uri)
         }
-
-
     )
 }
 
@@ -150,41 +122,39 @@ fun PdfListScreen(
 ) {
     val context = LocalContext.current
 
-    // ✅ Lógica de verificación continua del permiso
     LaunchedEffect(needsPermission) {
-        if (PermissionHelper.hasManageAllFiles(context)) {
+        if (!needsPermission && PermissionHelper.hasManageAllFiles(context)) {
             onRefresh()
         }
     }
 
     Scaffold(topBar = { TopAppBar(title = { Text("PDFs") }) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (needsPermission) {
-                PermissionCard(onManageAllFiles = onEnableManageAllFiles)
-            } else if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+
+            when {
+                needsPermission -> PermissionCard(onManageAllFiles = onEnableManageAllFiles)
+                isLoading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-            } else {
-                if (pdfs.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No se encontraron PDFs")
-                    }
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(pdfs) { pdf ->
-                            PdfRow(pdf = pdf, onClick = { onOpenPdf(pdf.uri) })
-                        }
+                pdfs.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No se encontraron PDFs")
+                }
+                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(pdfs) { pdf ->
+                        PdfRow(pdf = pdf, onClick = { onOpenPdf(pdf.uri) })
                     }
                 }
             }
+
             Spacer(modifier = Modifier.height(8.dp))
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 Button(onClick = onRefresh) { Text("Refrescar") }
             }
         }
     }
 }
+
 
 @Composable
 fun PermissionCard(onManageAllFiles: () -> Unit) {
@@ -193,9 +163,7 @@ fun PermissionCard(onManageAllFiles: () -> Unit) {
 
     var hasPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context, permissionToRequest
-            ) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, permissionToRequest) == PackageManager.PERMISSION_GRANTED
         )
     }
 
@@ -203,46 +171,27 @@ fun PermissionCard(onManageAllFiles: () -> Unit) {
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted ->
             hasPermission = isGranted
-            if (isGranted) {
-                onManageAllFiles()
-            }
+            if (isGranted) onManageAllFiles()
         }
     )
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
+    Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                "Esta app necesita permiso para listar PDFs",
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Text("Esta app necesita permiso para listar PDFs", style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(12.dp))
 
-            Button(
-                onClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        onManageAllFiles()
-                    } else {
-                        launcher.launch(permissionToRequest)
-                    }
-                }
-            ) {
-                Text("Habilitar acceso a todos los archivos")
-            }
+            Button(onClick = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) onManageAllFiles()
+                else launcher.launch(permissionToRequest)
+            }) { Text("Habilitar acceso a todos los archivos") }
 
             if (hasPermission) {
-                Text(
-                    "✅ Permiso concedido",
-                    color = Color.Green,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Text("✅ Permiso concedido", color = Color.Green, modifier = Modifier.padding(top = 8.dp))
             }
         }
     }
 }
+
 
 @Composable
 fun PdfRow(pdf: PdfItem, onClick: () -> Unit) {
@@ -252,6 +201,6 @@ fun PdfRow(pdf: PdfItem, onClick: () -> Unit) {
             .clickable { onClick() }
             .padding(12.dp)
     ) {
-        Text(text = pdf.name, style = MaterialTheme.typography.bodyLarge)
+        Text(pdf.name, style = MaterialTheme.typography.bodyLarge)
     }
 }
