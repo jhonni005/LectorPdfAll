@@ -1,4 +1,4 @@
-package com.zonadev.lectordocumentos.model
+package com.zonadev.lectordocumentos.data.model
 
 import android.net.Uri
 

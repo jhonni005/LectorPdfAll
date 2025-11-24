@@ -1,12 +1,11 @@
-package com.zonadev.lectordocumentos.utils
+package com.zonadev.lectordocumentos.data.repository
 
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
-import com.zonadev.lectordocumentos.model.PdfItem
-
+import com.zonadev.lectordocumentos.data.model.PdfItem
 
 class PdfRepository(private val context: Context) {
 
