@@ -33,7 +33,7 @@ object PermissionHelper {
                 // ✅ Este es el que muestra el radiobutton de "Acceso a todos los archivos"
                 Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                     data = Uri.parse("package:${context.packageName}")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                  //  addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             } else {
                 // 👉 Si es Huawei o Android < 11, lanzamos la solicitud del permiso normal
@@ -48,7 +48,7 @@ object PermissionHelper {
     fun appSettingsIntent(context: Context): Intent {
         return Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
             data = Uri.fromParts("package", context.packageName, null)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          //  addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
     }
 }

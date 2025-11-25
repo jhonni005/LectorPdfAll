@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -25,23 +27,18 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.zonadev.lectordocumentos.core.PermissionHelper
 import com.zonadev.lectordocumentos.data.model.PdfItem
 import com.zonadev.lectordocumentos.ui.components.PdfRow
 import com.zonadev.lectordocumentos.ui.components.PermissionCard
@@ -53,43 +50,29 @@ fun PdfAppEntry(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val listState = rememberSaveable(saver = LazyListState.Saver){
+        LazyListState()
+    }
 
-    // --- 1. Launcher para permisos Legacy (Android 10 o inferior / Huawei) ---
+    // --- AGREGADO: Launcher para Huawei / Android 10 o inferior ---
+    // Esto muestra el DIÁLOGO flotante estándar, no la pantalla de configuración.
     val legacyPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Verificamos si nos dieron permiso de lectura o escritura
+        val isGranted = permissions[Manifest.permission.READ_EXTERNAL_STORAGE] == true ||
+                permissions[Manifest.permission.WRITE_EXTERNAL_STORAGE] == true
+
         if (isGranted) {
             viewModel.refresh()
         }
     }
 
-    // --- 2. Manejo del Ciclo de Vida (Para volver de Configuración en Android 11+) ---
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                // Verificar permisos al volver a la app
-                if (PermissionHelper.hasManageAllFiles(context)) {
-                    // Solo refrescar si la UI cree que no tiene permiso o está vacía
-                    if (state.needsPermission || state.pdfs.isEmpty()) {
-                        viewModel.refresh()
-                    }
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
 
-    // --- 3. Carga Inicial ---
     LaunchedEffect(Unit) {
-        // Cargar solo si está vacío para evitar recargas dobles
-        if (state.pdfs.isEmpty() && !state.isLoading) {
-            viewModel.refresh()
-        }
+     //  viewModel.refresh()
     }
 
-    // --- 4. Renderizado ---
     PdfListScreen(
         isLoading = state.isLoading,
         pdfs = state.pdfs,
@@ -97,19 +80,26 @@ fun PdfAppEntry(
         isPermissionSkipped = state.isPermissionSkipped,
         onRefresh = { viewModel.refresh() },
 
-        // --- LÓGICA DE PERMISOS HÍBRIDA ---
         onEnableManageAllFiles = {
+            // --- LÓGICA DIVIDIDA ---
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Android 11+: Abre Intent de "Acceso a todos los archivos"
+                // CASO SAMSUNG / ANDROID 11+: Usamos tu lógica actual (AppOps / Settings)
                 viewModel.requestManageAllFiles(context)
             } else {
-                // Android 10- (Huawei, etc): Pide permiso clásico READ_EXTERNAL_STORAGE
-                legacyPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                // CASO HUAWEI / ANDROID 10-: Lanzamos el diálogo nativo
+                legacyPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                    )
+                )
             }
         },
 
         onSkipPermission = { viewModel.skipPermissionRequest() },
-        onOpenPdf = onOpenPdf
+        onOpenPdf = onOpenPdf,
+        listState = listState
+
     )
 }
 
@@ -123,7 +113,8 @@ fun PdfListScreen(
     onRefresh: () -> Unit,
     onEnableManageAllFiles: () -> Unit,
     onSkipPermission: () -> Unit,
-    onOpenPdf: (Uri) -> Unit
+    onOpenPdf: (Uri) -> Unit,
+    listState: LazyListState
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("Mis Documentos PDF") }) }
@@ -197,7 +188,9 @@ fun PdfListScreen(
 
                 // CASO E: Lista Correcta
                 else -> {
-                    LazyColumn(modifier = Modifier.weight(1f)) {
+                    LazyColumn(modifier = Modifier.weight(1f),
+                        state = listState
+                    ) {
                         // OPTIMIZACIÓN: 'key' ayuda a Compose a mantener la posición del scroll
                         items(items = pdfs, key = { it.id }) { pdf ->
                             PdfRow(pdf = pdf, onClick = { onOpenPdf(pdf.uri) })

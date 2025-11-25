@@ -18,6 +18,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.IOException
+import kotlin.math.min
+import androidx.core.graphics.createBitmap
 
 class PdfViewerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -34,10 +37,25 @@ class PdfViewerViewModel(application: Application) : AndroidViewModel(applicatio
     private var pdfDocument: PdfDocument? = null
     private var fileDescriptor: ParcelFileDescriptor? = null
 
+    // Mutex para evitar colisiones en la librería nativa
     private val renderMutex = Mutex()
 
-    private val memoryCache = object : LruCache<Int, Bitmap>(20 * 1024 * 1024) {
-        override fun sizeOf(key: Int, value: Bitmap): Int = value.byteCount
+    // OPTIMIZACIÓN 1: Caché dinámico basado en la memoria real del dispositivo (1/8 de la RAM disponible)
+    private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
+    private val cacheSize = maxMemory / 8
+
+    private val memoryCache = object : LruCache<Int, Bitmap>(cacheSize) {
+        override fun sizeOf(key: Int, value: Bitmap): Int {
+            // El tamaño se mide en Kilobytes
+            return value.byteCount / 1024
+        }
+    }
+
+    // Variable para guardar el ancho de pantalla
+    private var screenWidth: Int = 1080 // Valor por defecto
+
+    fun updateScreenWidth(widthPx: Int) {
+        this.screenWidth = widthPx
     }
 
     fun loadPdf(uri: Uri) {
@@ -75,8 +93,12 @@ class PdfViewerViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    suspend fun renderPage(index: Int): Bitmap? = withContext(Dispatchers.IO) {
-        memoryCache.get(index)?.let { return@withContext it }
+    // OPTIMIZACIÓN 2: Usar Dispatchers.Default para cálculos matemáticos (Renderizado)
+    suspend fun renderPage(index: Int): Bitmap? = withContext(Dispatchers.Default) {
+        // Verificar caché primero
+        synchronized(memoryCache) {
+            memoryCache.get(index)
+        }?.let { return@withContext it }
 
         renderMutex.withLock {
             val core = pdfiumCore
@@ -87,57 +109,61 @@ class PdfViewerViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
             try {
+                // Abrir página
                 core.openPage(doc, index)
 
                 val widthPoint = core.getPageWidthPoint(doc, index)
                 val heightPoint = core.getPageHeightPoint(doc, index)
 
-                val targetWidth = 1080
-                val scale = targetWidth.toFloat() / widthPoint
+                // OPTIMIZACIÓN 3: Resolución inteligente
+                // Usamos el ancho de la pantalla del usuario.
+                // Si la pantalla es muy pequeña, usamos el ancho; si es una tablet 4K, limitamos a 2048px para no explotar memoria.
+                val safeTargetWidth = min(screenWidth, 2048)
+
+                val scale = safeTargetWidth.toFloat() / widthPoint
                 val targetHeight = (heightPoint * scale).toInt()
 
-                val bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.RGB_565)
+                // Configuración RGB_565 ahorra 50% de RAM comparado con ARGB_8888 sin perder mucha calidad visible
+                val bitmap = createBitmap(safeTargetWidth, targetHeight, Bitmap.Config.RGB_565)
 
                 core.renderPageBitmap(
                     doc, bitmap, index,
-                    0, 0, targetWidth, targetHeight,
+                    0, 0, safeTargetWidth, targetHeight,
                     true
                 )
 
-                memoryCache.put(index, bitmap)
+                // Guardar en caché
+                synchronized(memoryCache) {
+                    memoryCache.put(index, bitmap)
+                }
+
                 return@withLock bitmap
 
             } catch (e: Exception) {
                 Log.e("PdfViewer", "Error renderizando pagina $index", e)
                 return@withLock null
             }
+            // Nota: No cerramos la página aquí explícitamente porque PdfiumAndroid gestiona mejor tener el doc abierto
+            // y renderizar bajo demanda. Cerrar/Abrir página constantemente consume CPU.
         }
     }
 
-    // --- CORRECCIÓN CLAVE: LIMPIEZA SIN BLOQUEAR LA UI ---
     override fun onCleared() {
         super.onCleared()
-
-        // 1. Capturamos las referencias locales para usarlas en otro hilo
         val coreToClose = pdfiumCore
         val docToClose = pdfDocument
         val fdToClose = fileDescriptor
 
-        // 2. Limpiamos las variables globales y la caché inmediatamente
         pdfiumCore = null
         pdfDocument = null
         fileDescriptor = null
         memoryCache.evictAll()
 
-        // 3. Ejecutamos el cierre "pesado" (I/O) en un hilo separado
-        // Usamos Thread simple porque el viewModelScope ya está cancelado en este punto
         Thread {
             try {
                 if (coreToClose != null && docToClose != null) {
-                    // Esta operación nativa es la que bloqueaba tu scroll
-                    docToClose.close()
+                    coreToClose.closeDocument(docToClose)
                 }
-                // Cerrar el archivo también es operación de disco
                 fdToClose?.close()
             } catch (e: Exception) {
                 e.printStackTrace()
