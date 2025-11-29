@@ -11,6 +11,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.zonadev.lectordocumentos.ui.screens.home.PdfAppEntry
+import com.zonadev.lectordocumentos.ui.screens.home.PdfSearchScreen
 import com.zonadev.lectordocumentos.ui.screens.viewer.PdfViewerScreen
 
 
@@ -39,9 +40,32 @@ fun AppNavHost(
                 onOpenPdf = { uri ->
                     val encoded = Uri.encode(uri.toString())
                     navController.navigate("viewer?uri=$encoded")
+                },
+                onSearchClick = {
+                    //navegamos a la pantalal de busqueda
+                    navController.navigate("search")
                 }
             )
         }
+        // --- 2. PANTALLA DE BÚSQUEDA (Nueva) ---
+        composable(
+            route = "search",
+            // Sin animaciones de entrada/salida
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
+        ) {
+            PdfSearchScreen(
+                onBack = { navController.popBackStack() },
+                onOpenPdf = { uri ->
+                    val encoded = Uri.encode(uri.toString())
+                    // Desde la búsqueda también podemos ir directo al visor
+                    navController.navigate("viewer?uri=$encoded")
+                }
+            )
+        }
+
 
         // --- Pantalla 2: Visor de PDF ---
         composable(
