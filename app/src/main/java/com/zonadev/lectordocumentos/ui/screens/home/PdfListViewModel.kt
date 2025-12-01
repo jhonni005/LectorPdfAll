@@ -11,20 +11,21 @@ import android.widget.Toast
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.zonadev.lectordocumentos.core.PermissionHelper
 import com.zonadev.lectordocumentos.data.model.PdfItem
 import com.zonadev.lectordocumentos.data.model.PdfSortOption
 import com.zonadev.lectordocumentos.data.repository.PdfRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class PdfListViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -34,9 +35,9 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
     // Cadena manual para evitar error de referencia en algunas versiones de compilador
     private val OP_MANAGE_EXTERNAL_STORAGE = "android:manage_external_storage"
 
+    // Estado UI (Solo Permisos y carga inicial de permisos)
+    // Nota: La lista de PDFs ya no está aquí, vive en el Flow 'pagedPdfList'
     data class PdfListUiState(
-        val isLoading: Boolean = false,
-        val pdfs: List<PdfItem> = emptyList(),
         val needsPermission: Boolean = false,
         val isPermissionSkipped: Boolean = false
     )
@@ -44,56 +45,25 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
     private val _uiState = MutableStateFlow(PdfListUiState())
     val uiState: StateFlow<PdfListUiState> = _uiState.asStateFlow()
 
-    // --- BÚSQUEDA ---
+    // --- FILTROS ---
     private val _searchText = MutableStateFlow(TextFieldValue(""))
     val searchText = _searchText.asStateFlow()
 
-    // --- ORDENAMIENTO ---
     private val _sortOption = MutableStateFlow(PdfSortOption.DATE_DESC)
     val sortOption = _sortOption.asStateFlow()
 
-    // --- FLUJO 1: LISTA PRINCIPAL (Para PdfListScreen) ---
-    // Siempre muestra TODOS los PDFs, solo aplica el ordenamiento.
-    val sortedPdfs: StateFlow<List<PdfItem>> = combine(_uiState, _sortOption) { state, sort ->
-        sortList(state.pdfs, sort)
+    // --- FLUJO PAGINADO MAESTRO ---
+    // Esta es la clave del rendimiento. Combina (Búsqueda + Orden).
+    // Si escribes una letra o cambias el orden, 'flatMapLatest' cancela la carga anterior
+    // y solicita una nueva paginación SQL optimizada.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val pagedPdfList: Flow<PagingData<PdfItem>> = combine(_searchText, _sortOption) { tfv, sort ->
+        Pair(tfv.text, sort)
+    }.flatMapLatest { (query, sort) ->
+        // Llamamos al repositorio que crea el PagingSource con la query SQL exacta
+        repository.getPdfPager(sort, query)
     }
-        .flowOn(Dispatchers.Default)
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-    // --- FLUJO 2: RESULTADOS DE BÚSQUEDA (Para PdfSearchScreen) ---
-    // Depende del texto: Si está vacío devuelve lista vacía, si no, filtra y ordena.
-    val searchResults: StateFlow<List<PdfItem>> = combine(_searchText, _uiState, _sortOption) { tfv, state, sort ->
-        val text = tfv.text
-        if (text.isBlank()) {
-            emptyList() // <--- IMPORTANTE: Empieza vacío para no mostrar todo al abrir la lupa
-        } else {
-            // Filtramos y luego ordenamos los resultados
-            val filtered = state.pdfs.filter { it.name.contains(text, ignoreCase = true) }
-            sortList(filtered, sort)
-        }
-    }
-        .flowOn(Dispatchers.Default)
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-    // Función auxiliar para ordenar listas (evita repetir código)
-    private fun sortList(list: List<PdfItem>, sort: PdfSortOption): List<PdfItem> {
-        return when (sort) {
-            PdfSortOption.DATE_DESC -> list.sortedByDescending { it.lastModified }
-            PdfSortOption.DATE_ASC -> list.sortedBy { it.lastModified }
-            PdfSortOption.NAME_ASC -> list.sortedBy { it.name.lowercase() }
-            PdfSortOption.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
-            PdfSortOption.SIZE_DESC -> list.sortedByDescending { it.size }
-            PdfSortOption.SIZE_ASC -> list.sortedBy { it.size }
-        }
-    }
+        .cachedIn(viewModelScope) // Cachear en ViewModel para sobrevivir rotaciones de pantalla
 
     fun onSearchTextChange(newValue: TextFieldValue) {
         _searchText.value = newValue
@@ -105,25 +75,23 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
 
     // --- INICIALIZACIÓN ---
     init {
-        refresh()
+        checkPermissions()
     }
 
+    // Llamado al iniciar o al volver de settings
     fun refresh() {
+        checkPermissions()
+        // Nota: Con Paging 3, el refresco de datos se hace en la UI llamando a .refresh()
+        // sobre el objeto LazyPagingItems, no aquí.
+    }
+
+    private fun checkPermissions() {
         val context = getApplication<Application>().applicationContext
-
         if (PermissionHelper.hasManageAllFiles(context)) {
-            stopWatchingPermission() // Ya tenemos permiso, dejamos de vigilar
-
-            viewModelScope.launch {
-                _uiState.value = _uiState.value.copy(isLoading = true, needsPermission = false)
-
-                // Carga de datos en hilo IO (Disco)
-                val pdfs = withContext(Dispatchers.IO) { repository.listPdfs() }
-
-                _uiState.value = _uiState.value.copy(isLoading = false, pdfs = pdfs)
-            }
+            stopWatchingPermission()
+            _uiState.value = _uiState.value.copy(needsPermission = false)
         } else {
-            _uiState.value = _uiState.value.copy(needsPermission = true, isLoading = false)
+            _uiState.value = _uiState.value.copy(needsPermission = true)
         }
     }
 
@@ -132,14 +100,14 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
         stopWatchingPermission()
     }
 
-    // --- GESTIÓN DE PERMISOS ---
+    // --- GESTIÓN DE PERMISOS (Lógica Nativa) ---
     fun requestManageAllFiles(activityContext: Context) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 // 1. Iniciamos vigilancia del sistema
                 startWatchingPermission()
 
-                // 2. Abrimos Settings SIN flag NEW_TASK para mantener la pila de navegación unida
+                // 2. Abrimos Settings SIN flag NEW_TASK para mantener la pila unida
                 val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                     data = Uri.parse("package:${activityContext.packageName}")
                 }
@@ -150,7 +118,7 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
                 activityContext.startActivity(intent)
             }
         } catch (e: Exception) {
-            Toast.makeText(activityContext, "No se pudo abrir la configuración", Toast.LENGTH_LONG).show()
+            Toast.makeText(activityContext, "Error al abrir configuración", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -158,21 +126,19 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val context = getApplication<Application>().applicationContext
             val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return
-
             appOpsListener = AppOpsManager.OnOpChangedListener { op, packageName ->
                 if (packageName == context.packageName && OP_MANAGE_EXTERNAL_STORAGE == op) {
                     if (PermissionHelper.hasManageAllFiles(context)) {
                         // A. Traer App al frente (cierra visualmente Settings)
                         bringAppToFront(context)
 
-                        // B. Refrescar lista
+                        // B. Verificar estado
                         viewModelScope.launch(Dispatchers.Main) {
-                            refresh()
+                            checkPermissions()
                         }
                     }
                 }
             }
-
             try {
                 appOps.startWatchingMode(
                     OP_MANAGE_EXTERNAL_STORAGE,

@@ -18,15 +18,27 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    
+    //Maxima Velocidad (Release)
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Habilita R8 (el optimizador de código de Google)
+            isMinifyEnabled = true
+            isShrinkResources = true
+
+            // Reglas de optimización estándar
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            // TRUCO: Usar la firma de debug para poder darle al botón "Play"
+            // y que se instale sin pedirte contraseñas.
+            // signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -40,6 +52,9 @@ android {
 }
 
 dependencies {
+
+    implementation ("androidx.paging:paging-runtime:3.3.0")
+    implementation ("androidx.paging:paging-compose:3.3.0")
 
     //implementation("com.github.mhiew:PdfiumAndroid:1.9.1")
     //implementation ("com.github.barteksc:pdfium-android:1.9.0")

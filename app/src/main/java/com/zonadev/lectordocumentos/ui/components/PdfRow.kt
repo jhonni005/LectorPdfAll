@@ -23,11 +23,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.zonadev.lectordocumentos.data.model.PdfItem
 
 @Composable
 fun PdfRow(
-    pdf: PdfItem,
+    namePdf: String,
+    pdfDetails: String, // Recibe el texto ya listo ("12 mar - 4MB")
     onClick: () -> Unit,
     onMoreOptionsClick: () -> Unit = {}
 ) {
@@ -35,43 +35,45 @@ fun PdfRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onClick() }
+                // OPTIMIZACIÓN: Clickable simple. Es más ligero que gestionar estados de interacción manuales.
+                .clickable(onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Icono PDF (Rojo)
+            // 1. Icono PDF (Rojo estático)
             Icon(
                 imageVector = Icons.Default.PictureAsPdf,
-                contentDescription = "PDF",
-                tint = Color(0xFFD32F2F), // Rojo Material
+                contentDescription = null, // null mejora el rendimiento de accesibilidad en scroll rápido
+                tint = Color(0xFFD32F2F),
                 modifier = Modifier.size(40.dp)
             )
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // 2. Información (Nombre y Detalles)
+            // 2. Información
             Column(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = pdf.name,
+                    text = namePdf,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // OPTIMIZACIÓN MÁXIMA:
-                // Usamos los Strings ya listos desde el repositorio.
-                // Cero cálculos en el hilo principal = Scroll a 60fps.
+                // --- RENDIMIENTO MÁXIMO ---
+                // Aquí solo pintamos el texto 'pdfDetails'.
+                // Como el cálculo pesado (fechas/bytes) ya se hizo en el PagingSource (hilo secundario),
+                // la UI vuela porque no tiene que pensar, solo mostrar.
                 Text(
-                    text = "${pdf.displayDate} - ${pdf.displaySize}",
+                    text = pdfDetails,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.Gray
                 )
             }
 
-            // 3. Menú de opciones (3 puntos)
+            // 3. Menú de opciones
             IconButton(onClick = onMoreOptionsClick) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
@@ -81,7 +83,6 @@ fun PdfRow(
             }
         }
 
-        // 4. Divisor
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 16.dp),
             thickness = 0.5.dp,
