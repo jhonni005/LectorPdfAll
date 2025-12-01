@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Acceso a TODO el almacenamiento externo -->
+    <external-path
+        name="external_storage"
+        path="." />
+
+    <!-- Acceso a internal files si fuese necesario -->
+    <files-path
+        name="internal_files"
+        path="." />
+</paths>
