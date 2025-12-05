@@ -23,8 +23,8 @@ android {
     buildTypes {
         release {
             // Habilita R8 (el optimizador de código de Google)
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
 
             // Reglas de optimización estándar
             proguardFiles(

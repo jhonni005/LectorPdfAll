@@ -16,6 +16,7 @@ import androidx.paging.cachedIn
 import com.zonadev.lectordocumentos.core.PermissionHelper
 import com.zonadev.lectordocumentos.data.model.PdfItem
 import com.zonadev.lectordocumentos.data.model.PdfSortOption
+import com.zonadev.lectordocumentos.data.model.PdfTab
 import com.zonadev.lectordocumentos.data.repository.PdfRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -45,21 +46,46 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
     private val _uiState = MutableStateFlow(PdfListUiState())
     val uiState: StateFlow<PdfListUiState> = _uiState.asStateFlow()
 
-    // --- FILTROS ---
+    // --- FILTROS SEARCH---
     private val _searchText = MutableStateFlow(TextFieldValue(""))
     val searchText = _searchText.asStateFlow()
 
     private val _sortOption = MutableStateFlow(PdfSortOption.DATE_DESC)
     val sortOption = _sortOption.asStateFlow()
 
+
+    // 3 puntitos - Opciones ---
+    private val _selectedPdfForOptions = MutableStateFlow<PdfItem?>(null)
+    val selectedPdfForOptions = _selectedPdfForOptions.asStateFlow()
+
+
+    //Estado pestaña actual : BottomNavigation
+    // 1. Nuevo Estado: Pestaña Actual
+    private val _currentTab = MutableStateFlow<PdfTab>(PdfTab.All)
+    val currentTab = _currentTab.asStateFlow()
+
+    // Función para abrir el menú
+    fun showPdfOptions(pdf: PdfItem) {
+        _selectedPdfForOptions.value = pdf
+    }
+
+    // Función para cerrar el menú
+    fun hidePdfOptions() {
+        _selectedPdfForOptions.value = null
+    }
+
     // --- FLUJO PAGINADO MAESTRO ---
     // Esta es la clave del rendimiento. Combina (Búsqueda + Orden).
     // Si escribes una letra o cambias el orden, 'flatMapLatest' cancela la carga anterior
     // y solicita una nueva paginación SQL optimizada.
     @OptIn(ExperimentalCoroutinesApi::class)
-    val pagedPdfList: Flow<PagingData<PdfItem>> = combine(_searchText, _sortOption) { tfv, sort ->
-        Pair(tfv.text, sort)
-    }.flatMapLatest { (query, sort) ->
+    val pagedPdfList: Flow<PagingData<PdfItem>> = combine(
+        _searchText,
+        _sortOption,
+        _currentTab
+    ) { tfv, sort , tab ->
+        Triple(tfv.text, sort, tab)
+    }.flatMapLatest { (query, sort, tab) ->
         // Llamamos al repositorio que crea el PagingSource con la query SQL exacta
         repository.getPdfPager(sort, query)
     }
@@ -71,6 +97,11 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
 
     fun updateSortOption(newOption: PdfSortOption) {
         _sortOption.value = newOption
+    }
+
+    // Acción para cambiar pestaña
+    fun onTabSelected(tab: PdfTab) {
+        _currentTab.value = tab
     }
 
     // --- INICIALIZACIÓN ---

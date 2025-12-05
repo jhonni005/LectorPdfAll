@@ -14,6 +14,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.rememberNavController
 import com.zonadev.lectordocumentos.navigation.AppNavHost
+import com.zonadev.lectordocumentos.ui.AppRoot
 
 import com.zonadev.lectordocumentos.ui.theme.LectorDocumentosTheme
 
@@ -23,10 +24,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             LectorDocumentosTheme {
-                val navController = rememberNavController()
+            //    val navController = rememberNavController()
                 Surface(modifier = Modifier) {
                   //  PdfAppEntry
-                    AppNavHost(navController = navController)
+                    AppRoot()
                 }
             }
         }

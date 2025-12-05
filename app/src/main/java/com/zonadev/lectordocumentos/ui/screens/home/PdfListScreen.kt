@@ -5,33 +5,27 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DataUsage
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -42,10 +36,13 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.zonadev.lectordocumentos.core.PermissionHelper
 import com.zonadev.lectordocumentos.data.model.PdfItem
-import com.zonadev.lectordocumentos.data.model.PdfSortOption
+import com.zonadev.lectordocumentos.data.model.PdfTab
+import com.zonadev.lectordocumentos.ui.components.pdfoptions.PdfOptionsBottomSheet
 import com.zonadev.lectordocumentos.ui.components.PdfRow
 import com.zonadev.lectordocumentos.ui.components.PermissionCard
+import com.zonadev.lectordocumentos.ui.components.SortBottomSheetContent
 import kotlinx.coroutines.launch
+
 
 // 1. NIVEL SUPERIOR: Lógica y Estado Global
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,6 +54,8 @@ fun PdfAppEntry(
 ) {
     val state by viewModel.uiState.collectAsState()
     val currentSortOption by viewModel.sortOption.collectAsState()
+    val currentTab by viewModel.currentTab.collectAsState()
+    val selectedPdf by viewModel.selectedPdfForOptions.collectAsState()
 
     // Recolectamos el flujo Paging 3 aquí
     val pagedPdfs = viewModel.pagedPdfList.collectAsLazyPagingItems()
@@ -66,8 +65,8 @@ fun PdfAppEntry(
     val scope = rememberCoroutineScope()
 
     // Configuración del BottomSheet
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var showBottomSheet by remember { mutableStateOf(false) }
+    val sortSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showSortSheet by remember { mutableStateOf(false) }
 
     // Estado del scroll elevado
     val listState = rememberSaveable(saver = LazyListState.Saver) {
@@ -118,6 +117,8 @@ fun PdfAppEntry(
         pagedPdfs = pagedPdfs,
         needsPermission = state.needsPermission,
         isPermissionSkipped = state.isPermissionSkipped,
+        currentTab = currentTab,
+        listState = listState,
         onRefresh = {
             viewModel.refresh()
             pagedPdfs.refresh()
@@ -137,60 +138,101 @@ fun PdfAppEntry(
         onSkipPermission = { viewModel.skipPermissionRequest() },
         onOpenPdf = onOpenPdf,
         onSearchClick = onSearchClick,
-        onSortClick = { showBottomSheet = true },
-        listState = listState
+        onSortClick = { showSortSheet = true },
+        onMoreOptionsClick = { pdf ->
+            viewModel.showPdfOptions(pdf)
+        }
     )
 
-    // Bottom Sheet Global
-    if (showBottomSheet) {
+    // --- AQUÍ LLAMAMOS A TU COMPONENTE ---
+
+    if (showSortSheet) {
         ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false },
-            sheetState = sheetState,
-            containerColor = Color.White
+            onDismissRequest = { showSortSheet = false },
+            sheetState = sortSheetState,
         ) {
+            // Estado temporal para jugar con los checks sin aplicar cambios todavía
             var tempSelectedOption by remember { mutableStateOf(currentSortOption) }
+
             SortBottomSheetContent(
                 selectedOption = tempSelectedOption,
                 onOptionSelected = { tempSelectedOption = it },
-                onCancel = { scope.launch { sheetState.hide() }.invokeOnCompletion { showBottomSheet = false } },
+                onCancel = {
+                    scope.launch { sortSheetState.hide() }
+                        .invokeOnCompletion { showSortSheet = false }
+                },
                 onApply = {
                     viewModel.updateSortOption(tempSelectedOption)
-                    scope.launch { sheetState.hide() }.invokeOnCompletion { showBottomSheet = false }
+                    scope.launch { sortSheetState.hide() }
+                        .invokeOnCompletion { showSortSheet = false }
                 }
             )
         }
     }
+    // --- 3. CONECTAMOS EL NUEVO BOTTOM SHEET DE OPCIONES ---
+    if (selectedPdf != null) {
+        PdfOptionsBottomSheet(
+            pdf = selectedPdf!!,
+            onDismiss = { viewModel.hidePdfOptions() },
+            onShare = { /* Implementar logica compartir */ },
+            onRename = { /* Implementar logica renombrar */ },
+            onDetails = { /* Implementar logica detalles */ },
+            onDelete = { /* Implementar logica borrar */ },
+            onToggleFavorite = { isFav -> /* Implementar logica favoritos */ }
+        )
+    }
 }
 
-// 2. NIVEL MEDIO: Estructura Visual (Scaffold)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PdfListScreen(
     pagedPdfs: LazyPagingItems<PdfItem>,
     needsPermission: Boolean,
     isPermissionSkipped: Boolean,
+    currentTab: PdfTab,
     onRefresh: () -> Unit,
     onEnableManageAllFiles: () -> Unit,
     onSkipPermission: () -> Unit,
     onOpenPdf: (Uri) -> Unit,
     onSearchClick: () -> Unit,
     onSortClick: () -> Unit,
+    onMoreOptionsClick: (PdfItem) -> Unit,
     listState: LazyListState
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Mis Documentos PDF") },
-                actions = {
-                    IconButton(onClick = onSortClick) { Icon(Icons.AutoMirrored.Filled.Sort, "Ordenar") }
-                    IconButton(onClick = onSearchClick) { Icon(Icons.Default.Search, "Buscar") }
-                }
+    val titleText = if (currentTab == PdfTab.All) "Mis Documentos PDF" else currentTab.title
+
+    // 🔥 CAMBIO PRINCIPAL: Usamos Column en lugar de Scaffold
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // 1. Barra Superior
+        TopAppBar(
+            title = {
+                Text(
+                    text = titleText,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                )
+            },
+            actions = {
+
+                IconButton(onClick = onSortClick) { Icon(Icons.AutoMirrored.Filled.Sort, "Ordenar") }
+                IconButton(onClick = onSearchClick) { Icon(Icons.Default.Search, "Buscar") }
+            },
+            // 🔥 CLAVE: insets en 0 para evitar doble padding (el padre ya lo pone)
+            windowInsets = WindowInsets(0.dp),
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                // Usamos 'onSurface' para que los iconos/texto sean legibles sobre 'surface'
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                actionIconContentColor = MaterialTheme.colorScheme.onSurface
             )
-        }
-    ) { padding ->
-        // 3. SEPARACIÓN DE CONTENIDO: Pasamos solo lo necesario
+        )
+
+        // 2. Contenido de la lista (Ocupa el resto del espacio)
         PdfListContent(
-            modifier = Modifier.padding(padding),
+            modifier = Modifier.weight(1f),
             pagedPdfs = pagedPdfs,
             listState = listState,
             needsPermission = needsPermission,
@@ -198,13 +240,14 @@ fun PdfListScreen(
             onRefresh = onRefresh,
             onEnableManageAllFiles = onEnableManageAllFiles,
             onSkipPermission = onSkipPermission,
-            onOpenPdf = onOpenPdf
+            onOpenPdf = onOpenPdf,
+            onMoreOptionsClick = onMoreOptionsClick
         )
     }
 }
 
-// 3. NIVEL INFERIOR: Lista Pura (Aislada de recomposiciones)
-// Este componente solo cambia si cambia la lista o el permiso, ignorando el BottomSheet
+// 3. NIVEL INFERIOR (Contenido con solución de scroll)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PdfListContent(
     modifier: Modifier = Modifier,
@@ -215,9 +258,14 @@ fun PdfListContent(
     onRefresh: () -> Unit,
     onEnableManageAllFiles: () -> Unit,
     onSkipPermission: () -> Unit,
-    onOpenPdf: (Uri) -> Unit
+    onOpenPdf: (Uri) -> Unit,
+    onMoreOptionsClick: (PdfItem) -> Unit
 ) {
-    Column(modifier = modifier.fillMaxSize()) {
+    // Lógica anti-parpadeo para Huawei (Android < 12)
+    val currentOverscroll = LocalOverscrollFactory.current
+    val factoryToUse = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) currentOverscroll else null
+
+    Box(modifier = modifier.fillMaxSize()) {
         when {
             needsPermission && !isPermissionSkipped -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -232,96 +280,54 @@ fun PdfListContent(
                     }
                 }
             }
-
-            // Estado de Carga Inicial
             pagedPdfs.loadState.refresh is LoadState.Loading -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
-
-            // Lista Vacía
             pagedPdfs.loadState.refresh is LoadState.NotLoading && pagedPdfs.itemCount == 0 -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No se encontraron archivos PDF")
+                        Text("No se encontraron archivos PDF", textAlign = TextAlign.Center)
                         Spacer(Modifier.height(8.dp))
                         Button(onClick = onRefresh) { Text("Refrescar") }
                     }
                 }
             }
-
-            // LISTA DE DATOS (Zona Crítica)
             else -> {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    state = listState,
-                    // Evita cortes visuales al final de la lista
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                // Solución de Scroll
+                CompositionLocalProvider(
+                    LocalOverscrollFactory provides factoryToUse,
+                    LocalOverscrollConfiguration provides null
                 ) {
-                    items(
-                        count = pagedPdfs.itemCount,
-                        // Key estable para rendimiento en scroll
-                        key = pagedPdfs.itemKey { it.id },
-                        // ContentType para reciclaje de vistas eficiente
-                        contentType = { "pdf_row" }
-                    ) { index ->
-                        val pdf = pagedPdfs[index]
-                        if (pdf != null) {
-                            // PdfRow optimizado (recibe strings)
-                            PdfRow(
-                                namePdf = pdf.name,
-                                pdfDetails = pdf.details,
-                                onClick = { onOpenPdf(pdf.uri) }
-                            )
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        state = listState,
+                        contentPadding = PaddingValues(bottom = 4.dp)
+                    ) {
+                        items(
+                            count = pagedPdfs.itemCount,
+                            key = pagedPdfs.itemKey { it.id },
+                            contentType = { "pdf_row" }
+                        ) { index ->
+                            val pdf = pagedPdfs[index]
+                            if (pdf != null) {
+                                PdfRow(
+                                    namePdf = pdf.name,
+                                    pdfDetails = pdf.details,
+                                    onClick = { onOpenPdf(pdf.uri) },
+                                    onMoreOptionsClick = { onMoreOptionsClick(pdf) }
+                                )
+                            }
                         }
-                    }
-
-                    // Spinner al cargar más (scroll infinito)
-                    if (pagedPdfs.loadState.append is LoadState.Loading) {
-                        item {
-                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        if (pagedPdfs.loadState.append is LoadState.Loading) {
+                            item {
+                                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
-}
-
-// --- Componentes Auxiliares del Bottom Sheet ---
-
-@Composable
-fun SortBottomSheetContent(selectedOption: PdfSortOption, onOptionSelected: (PdfSortOption) -> Unit, onCancel: () -> Unit, onApply: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp).padding(bottom = 24.dp)) {
-        Text("Ordenar por", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
-        SortOptionRow("Última modificación (Reciente)", Icons.Default.History, selectedOption == PdfSortOption.DATE_DESC) { onOptionSelected(PdfSortOption.DATE_DESC) }
-        SortOptionRow("Última modificación (Antiguo)", Icons.Default.AccessTime, selectedOption == PdfSortOption.DATE_ASC) { onOptionSelected(PdfSortOption.DATE_ASC) }
-        SortOptionRow("Nombre (A-Z)", Icons.Default.SortByAlpha, selectedOption == PdfSortOption.NAME_ASC) { onOptionSelected(PdfSortOption.NAME_ASC) }
-        SortOptionRow("Nombre (Z-A)", Icons.Default.SortByAlpha, selectedOption == PdfSortOption.NAME_DESC) { onOptionSelected(PdfSortOption.NAME_DESC) }
-        SortOptionRow("Tamaño (Mayor)", Icons.Default.DataUsage, selectedOption == PdfSortOption.SIZE_DESC) { onOptionSelected(PdfSortOption.SIZE_DESC) }
-        SortOptionRow("Tamaño (Menor)", Icons.Default.DataUsage, selectedOption == PdfSortOption.SIZE_ASC) { onOptionSelected(PdfSortOption.SIZE_ASC) }
-        Spacer(modifier = Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = onCancel, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF0F0F0)), modifier = Modifier.weight(1f).padding(end = 8.dp)) { Text("Cancelar", color = Color.Black) }
-            Button(onClick = onApply, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.weight(1f).padding(start = 8.dp)) { Text("Aceptar", color = Color.White) }
-        }
-    }
-}
-
-@Composable
-fun SortOptionRow(text: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(imageVector = icon, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(text = text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        CustomRadioButton(isSelected = isSelected)
-    }
-}
-
-@Composable
-fun CustomRadioButton(isSelected: Boolean) {
-    Box(modifier = Modifier.size(24.dp).background(color = if (isSelected) Color(0xFFD32F2F) else Color.Transparent, shape = CircleShape).border(width = 2.dp, color = if (isSelected) Color(0xFFD32F2F) else Color.Gray, shape = CircleShape), contentAlignment = Alignment.Center) {
-        if (isSelected) Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
     }
 }

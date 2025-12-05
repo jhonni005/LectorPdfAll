@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+
 
 @Composable
 fun PdfViewerScreen(
@@ -79,7 +81,8 @@ private fun PdfViewerContent(
                         // usa Icons.Default.ArrowBack
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
                     }
-                }
+                },
+                windowInsets = WindowInsets(0.dp)
             )
         }
     ) { padding ->
@@ -93,6 +96,7 @@ private fun PdfViewerContent(
                 isLoading -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
+
                 error != null -> {
                     Text(
                         text = "Error: $error",
@@ -100,6 +104,7 @@ private fun PdfViewerContent(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
+
                 else -> {
                     // Lista eficiente: solo renderiza las páginas visibles
                     LazyColumn(

@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,6 +36,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -44,6 +46,7 @@ import androidx.paging.compose.itemKey
 import com.zonadev.lectordocumentos.data.model.PdfItem
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
+
 
 @Composable
 fun PdfSearchScreen(
@@ -67,17 +70,19 @@ fun PdfSearchScreen(
         keyboardController?.show()
     }
 
+
     Scaffold(
         topBar = {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding()
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = {
+                    onBack()
+                }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
                 }
 
@@ -163,17 +168,6 @@ fun PdfSearchRow(
             text = buildHighlightedString(pdf.name, query),
             style = MaterialTheme.typography.bodyLarge
         )
-     /*   Text(
-            text = buildHighlightedString(pdf.details, query),
-            style = MaterialTheme.typography.bodySmall
-        )
-        HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            thickness = 0.5.dp,
-            color = Color.LightGray.copy(alpha = 0.5f)
-        )*/
-        // Opcional: Mostrar detalles también en búsqueda
-        // Text(text = pdf.details, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
     }
 }
 
