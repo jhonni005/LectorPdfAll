@@ -50,7 +50,7 @@ fun AppRoot() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
             AppNavHost(
                 navController = navController,

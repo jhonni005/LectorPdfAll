@@ -9,12 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,7 +22,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,7 +35,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -44,32 +42,31 @@ import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.zonadev.lectordocumentos.data.model.PdfItem
+// IMPORTANTE: Asegúrate de importar el ViewModel independiente
+import com.zonadev.lectordocumentos.ui.screens.search.PdfSearchViewModel
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
-
 
 @Composable
 fun PdfSearchScreen(
     onBack: () -> Unit,
     onOpenPdf: (Uri) -> Unit,
-    viewModel: PdfListViewModel = viewModel()
+    viewModel: PdfSearchViewModel = viewModel()
 ) {
     val searchText by viewModel.searchText.collectAsState()
 
-    // --- CORRECCIÓN PAGING 3 ---
-    // En lugar de 'searchResults', usamos el flujo paginado maestro.
-    // Este flujo ya se filtra solo gracias al ViewModel que conecta el texto con la query SQL.
-    val pagedSearchResults = viewModel.pagedPdfList.collectAsLazyPagingItems()
+    // Recolectamos los resultados paginados desde el ViewModel de búsqueda
+    val pagedSearchResults = viewModel.searchResults.collectAsLazyPagingItems()
 
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    // Auto-foco del teclado al entrar
     LaunchedEffect(Unit) {
-        awaitFrame()
+        awaitFrame() // Pequeño delay para asegurar que la UI está lista
         focusRequester.requestFocus()
         keyboardController?.show()
     }
-
 
     Scaffold(
         topBar = {
@@ -77,12 +74,13 @@ fun PdfSearchScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
+                    .statusBarsPadding()
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = {
-                    onBack()
-                }) {
+                // Botón Atrás: Solo navega. No necesitamos limpiar el texto manualmente
+                // porque al salir, este ViewModel se destruye.
+                IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
                 }
 
@@ -99,14 +97,14 @@ fun PdfSearchScreen(
             }
         }
     ) { padding ->
-        // Solo mostramos resultados si el usuario ha escrito algo
+        // Solo mostramos la lista si hay texto escrito
         if (searchText.text.isNotEmpty()) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                // Estado de Carga Inicial (Spinner al buscar)
+                // Estado 1: Cargando (Spinner)
                 if (pagedSearchResults.loadState.refresh is LoadState.Loading) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -115,7 +113,7 @@ fun PdfSearchScreen(
                     }
                 }
 
-                // Mensaje si no hay resultados
+                // Estado 2: Sin resultados
                 if (pagedSearchResults.loadState.refresh is LoadState.NotLoading && pagedSearchResults.itemCount == 0) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -124,7 +122,7 @@ fun PdfSearchScreen(
                     }
                 }
 
-                // Lista de Resultados Paginada
+                // Estado 3: Lista de Resultados
                 items(
                     count = pagedSearchResults.itemCount,
                     key = pagedSearchResults.itemKey { it.id },
@@ -135,13 +133,26 @@ fun PdfSearchScreen(
                         PdfSearchRow(
                             pdf = pdf,
                             query = searchText.text,
-                            onClick = { onOpenPdf(pdf.uri) }
+                            onClick = {
+                                // Al abrir un PDF, no limpiamos nada.
+                                // Si el usuario vuelve, el ViewModel sigue vivo y verá sus resultados.
+                                onOpenPdf(pdf.uri)
+                            }
                         )
+                    }
+                }
+
+                // Estado 4: Cargando más resultados (Scroll infinito)
+                if (pagedSearchResults.loadState.append is LoadState.Loading) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
                     }
                 }
             }
         } else {
-            // Pantalla vacía inicial (opcional: mostrar historial o sugerencias)
+            // Pantalla inicial vacía
             Box(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
@@ -164,10 +175,19 @@ fun PdfSearchRow(
             .clickable { onClick() }
             .padding(16.dp)
     ) {
+        // Resaltamos el texto que coincide con la búsqueda
         Text(
             text = buildHighlightedString(pdf.name, query),
             style = MaterialTheme.typography.bodyLarge
         )
+        // Puedes descomentar esto si quieres mostrar detalles (fecha/peso) en la búsqueda
+        /*
+        Text(
+            text = pdf.details,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray
+        )
+        */
     }
 }
 
@@ -186,7 +206,9 @@ fun buildHighlightedString(fullText: String, query: String): androidx.compose.ui
                 append(fullText.substring(startIndex))
                 break
             }
+            // Parte normal
             append(fullText.substring(startIndex, index))
+            // Parte resaltada (Rojo y Negrita)
             withStyle(style = SpanStyle(color = Color.Red, fontWeight = FontWeight.Bold)) {
                 append(fullText.substring(index, index + lowerQuery.length))
             }

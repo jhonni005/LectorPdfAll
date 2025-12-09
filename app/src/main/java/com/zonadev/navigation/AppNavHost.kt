@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.core.net.toUri
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -55,10 +56,8 @@ fun AppNavHost(
             popExitTransition = { ExitTransition.None }
         ) {
             PdfSearchScreen(
-                viewModel = sharedViewModel,
                 onBack = {
                     navController.popBackStack()
-                    sharedViewModel.onSearchTextChange(TextFieldValue(""))
                          },
                 onOpenPdf = { uri ->
                     val encoded = Uri.encode(uri.toString())

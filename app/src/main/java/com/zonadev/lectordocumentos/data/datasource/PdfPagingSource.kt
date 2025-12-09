@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+
 class PdfPagingSource(
     private val context: Context,
     private val sortOption: PdfSortOption,
@@ -47,7 +48,8 @@ class PdfPagingSource(
                     MediaStore.Files.FileColumns._ID,
                     MediaStore.Files.FileColumns.DISPLAY_NAME,
                     MediaStore.Files.FileColumns.DATE_MODIFIED,
-                    MediaStore.Files.FileColumns.SIZE
+                    MediaStore.Files.FileColumns.SIZE,
+                    MediaStore.Files.FileColumns.DATA
                 )
 
                 var selection = "${MediaStore.Files.FileColumns.MIME_TYPE} = ?"
@@ -81,7 +83,10 @@ class PdfPagingSource(
                 val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     val queryArgs = Bundle().apply {
                         putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
-                        putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs.toTypedArray())
+                        putStringArray(
+                            ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS,
+                            selectionArgs.toTypedArray()
+                        )
                         putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrderSql)
                         putInt(ContentResolver.QUERY_ARG_LIMIT, pageSize)
                         putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
@@ -97,23 +102,38 @@ class PdfPagingSource(
                 cursor?.use { c ->
                     val idCol = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
                     val nameCol = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
-                    val dateCol = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATE_MODIFIED)
+                    val dateCol =
+                        c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATE_MODIFIED)
                     val sizeCol = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
+                    val pathCol = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATA)
 
                     while (c.moveToNext()) {
                         val id = c.getLong(idCol)
                         val name = c.getString(nameCol) ?: "Sin nombre"
                         val dateMillis = c.getLong(dateCol) * 1000
                         val sizeBytes = c.getLong(sizeCol)
+                        val realPath = c.getString(pathCol) ?: "Ruta desconocida"
                         val uri = ContentUris.withAppendedId(queryUri, id)
 
                         // Pre-cálculo seguro
-                        val dateStr = try { dateFormatter.format(dateMillis) } catch (e: Exception) { "" }
+                        val dateStr = try {
+                            dateFormatter.format(dateMillis)
+                        } catch (e: Exception) {
+                            ""
+                        }
                         val sizeStr = formatSize(sizeBytes)
                         val detailsFinal = "$dateStr - $sizeStr"
 
                         pdfList.add(
-                            PdfItem(id, name, uri, dateMillis, sizeBytes, detailsFinal)
+                            PdfItem(
+                                id = id,
+                                name = name,
+                                uri = uri,
+                                lastModified = dateMillis,
+                                size = sizeBytes,
+                                path = realPath,
+                                details = detailsFinal
+                            )
                         )
                     }
                 }

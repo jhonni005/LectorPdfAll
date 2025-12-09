@@ -35,12 +35,17 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.zonadev.lectordocumentos.core.PermissionHelper
+import com.zonadev.lectordocumentos.core.ShareHelper
 import com.zonadev.lectordocumentos.data.model.PdfItem
 import com.zonadev.lectordocumentos.data.model.PdfTab
+import com.zonadev.lectordocumentos.ui.components.DeletePdfDialog
+import com.zonadev.lectordocumentos.ui.components.PdfDetailsDialog
 import com.zonadev.lectordocumentos.ui.components.pdfoptions.PdfOptionsBottomSheet
 import com.zonadev.lectordocumentos.ui.components.PdfRow
 import com.zonadev.lectordocumentos.ui.components.PermissionCard
+import com.zonadev.lectordocumentos.ui.components.RenamePdfDialog
 import com.zonadev.lectordocumentos.ui.components.SortBottomSheetContent
+import com.zonadev.lectordocumentos.ui.utils.StableTopPadding
 import kotlinx.coroutines.launch
 
 
@@ -59,6 +64,11 @@ fun PdfAppEntry(
 
     // Recolectamos el flujo Paging 3 aquí
     val pagedPdfs = viewModel.pagedPdfList.collectAsLazyPagingItems()
+
+    // Estados para Renombrar,Detalles y Eliminar
+    var pdfToRename by remember { mutableStateOf<PdfItem?>(null) }
+    var pdfForDetails by remember { mutableStateOf<PdfItem?>(null) }
+    var pdfToDelete by remember { mutableStateOf<PdfItem?>(null) }
 
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -82,8 +92,13 @@ fun PdfAppEntry(
     LaunchedEffect(state.needsPermission) {
         if (!state.needsPermission) {
             pagedPdfs.refresh()
+            viewModel.refresh()
+
         }
     }
+
+
+
 
     val legacyPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -170,18 +185,60 @@ fun PdfAppEntry(
         }
     }
     // --- 3. CONECTAMOS EL NUEVO BOTTOM SHEET DE OPCIONES ---
-    if (selectedPdf != null) {
+    selectedPdf?.let{ pdf->
         PdfOptionsBottomSheet(
             pdf = selectedPdf!!,
             onDismiss = { viewModel.hidePdfOptions() },
-            onShare = { /* Implementar logica compartir */ },
-            onRename = { /* Implementar logica renombrar */ },
-            onDetails = { /* Implementar logica detalles */ },
-            onDelete = { /* Implementar logica borrar */ },
+            onShare = { ShareHelper.sharePdf(context,pdf) },
+            onRename = {
+                pdfToRename = selectedPdf
+                viewModel.hidePdfOptions()
+            },
+            onDetails = {
+                pdfForDetails = selectedPdf // Guardamos el PDF para ver sus detalles
+                viewModel.hidePdfOptions()
+            },
+            onDelete = {
+                pdfToDelete = pdf
+                viewModel.hidePdfOptions()
+                       },
             onToggleFavorite = { isFav -> /* Implementar logica favoritos */ }
         )
     }
+    if (pdfToRename != null) {
+        RenamePdfDialog(
+            currentName = pdfToRename!!.name,
+            onDismiss = { pdfToRename = null },
+            onConfirm = { newName ->
+                viewModel.renamePdf(pdfToRename!!, newName)
+                pdfToRename = null
+            }
+        )
+    }
+
+    // 4. NUEVO: Diálogo de Detalles
+    pdfForDetails?.let {details->
+        PdfDetailsDialog(
+            pdf = pdfForDetails!!,
+            onDismiss = { pdfForDetails = null } // Limpiamos estado al cerrar
+        )
+    }
+
+    pdfToDelete?.let {pdf->
+        DeletePdfDialog(
+            pdfName = pdf.name,
+            onDismiss = {pdfToDelete = null},
+            onConfirm = {
+                viewModel.deletePdf(pdf)
+                pdfToDelete = null
+            }
+        )
+    }
+
 }
+
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -201,13 +258,15 @@ fun PdfListScreen(
 ) {
     val titleText = if (currentTab == PdfTab.All) "Mis Documentos PDF" else currentTab.title
 
-    // 🔥 CAMBIO PRINCIPAL: Usamos Column en lugar de Scaffold
+    // 1. Usamos el helper para obtener el padding estable
+    val stableTopPadding = StableTopPadding()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 1. Barra Superior
+        // 2. TopAppBar
         TopAppBar(
             title = {
                 Text(
@@ -216,15 +275,18 @@ fun PdfListScreen(
                 )
             },
             actions = {
-
                 IconButton(onClick = onSortClick) { Icon(Icons.AutoMirrored.Filled.Sort, "Ordenar") }
                 IconButton(onClick = onSearchClick) { Icon(Icons.Default.Search, "Buscar") }
             },
-            // 🔥 CLAVE: insets en 0 para evitar doble padding (el padre ya lo pone)
+
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = stableTopPadding),
+            // 3. Clave: Desactivamos el padding interno de la barra
             windowInsets = WindowInsets(0.dp),
+
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surface,
-                // Usamos 'onSurface' para que los iconos/texto sean legibles sobre 'surface'
                 titleContentColor = MaterialTheme.colorScheme.onSurface,
                 actionIconContentColor = MaterialTheme.colorScheme.onSurface
             )
@@ -245,6 +307,14 @@ fun PdfListScreen(
         )
     }
 }
+
+
+
+
+
+
+
+
 
 // 3. NIVEL INFERIOR (Contenido con solución de scroll)
 @OptIn(ExperimentalFoundationApi::class)

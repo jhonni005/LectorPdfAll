@@ -49,10 +49,8 @@ fun PdfViewerScreen(
         viewModel.loadPdf(pdfUri)
     }
 
-    // 2. Observar el estado de la UI (Cargando, Error, Cantidad de Páginas)
     val state by viewModel.uiState.collectAsState()
 
-    // 3. Renderizar el contenido
     PdfViewerContent(
         isLoading = state.isLoading,
         error = state.error,
@@ -61,6 +59,10 @@ fun PdfViewerScreen(
         onBack = onBack
     )
 }
+
+
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,7 +84,7 @@ private fun PdfViewerContent(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
                     }
                 },
-                windowInsets = WindowInsets(0.dp)
+             //   windowInsets = WindowInsets(0.dp)
             )
         }
     ) { padding ->

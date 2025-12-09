@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PdfListViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -46,13 +47,11 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
     private val _uiState = MutableStateFlow(PdfListUiState())
     val uiState: StateFlow<PdfListUiState> = _uiState.asStateFlow()
 
-    // --- FILTROS SEARCH---
-    private val _searchText = MutableStateFlow(TextFieldValue(""))
-    val searchText = _searchText.asStateFlow()
-
     private val _sortOption = MutableStateFlow(PdfSortOption.DATE_DESC)
     val sortOption = _sortOption.asStateFlow()
 
+    // Trigger para forzar recarga (ej. al renombrar)
+    private val _refreshTrigger = MutableStateFlow(0)
 
     // 3 puntitos - Opciones ---
     private val _selectedPdfForOptions = MutableStateFlow<PdfItem?>(null)
@@ -80,20 +79,16 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
     // y solicita una nueva paginación SQL optimizada.
     @OptIn(ExperimentalCoroutinesApi::class)
     val pagedPdfList: Flow<PagingData<PdfItem>> = combine(
-        _searchText,
         _sortOption,
-        _currentTab
-    ) { tfv, sort , tab ->
-        Triple(tfv.text, sort, tab)
-    }.flatMapLatest { (query, sort, tab) ->
+        _currentTab,
+        _refreshTrigger
+    ) { sort , tab, _ ->
+        Pair(sort, tab)
+    }.flatMapLatest { (sort, tab) ->
         // Llamamos al repositorio que crea el PagingSource con la query SQL exacta
-        repository.getPdfPager(sort, query)
+        repository.getPdfPager(sort, query = "")
     }
         .cachedIn(viewModelScope) // Cachear en ViewModel para sobrevivir rotaciones de pantalla
-
-    fun onSearchTextChange(newValue: TextFieldValue) {
-        _searchText.value = newValue
-    }
 
     fun updateSortOption(newOption: PdfSortOption) {
         _sortOption.value = newOption
@@ -114,6 +109,47 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
         checkPermissions()
         // Nota: Con Paging 3, el refresco de datos se hace en la UI llamando a .refresh()
         // sobre el objeto LazyPagingItems, no aquí.
+    }
+
+
+    //Borrar PDF
+    fun deletePdf(pdf: PdfItem){
+        viewModelScope.launch(Dispatchers.IO){
+            val success = repository.deletePdf(pdf.uri)
+            if (success){
+                _refreshTrigger.value+=1
+            }else{
+                withContext(Dispatchers.Main){
+                    Toast.makeText(getApplication(), "No se pudo borrar el archivo", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+    }
+
+
+    // NUEVO: Renombrar PDF
+    fun renamePdf(pdf: PdfItem, newName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // 1. Llamamos al repositorio pasando el callback 'onScanCompleted'
+            val success = repository.renamePdf(
+                uri = pdf.uri,
+                newName = newName,
+                onScanCompleted = {
+                    // 2. Este bloque se ejecuta AUTOMÁTICAMENTE cuando Android termina de indexar.
+                    // Incrementamos el trigger para recargar la lista al instante.
+                    _refreshTrigger.value += 1
+                }
+            )
+
+            // 3. Si falló el renombrado inicial (permisos, archivo no existe, etc), avisamos.
+            if (!success) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(getApplication(), "No se pudo renombrar el archivo", Toast.LENGTH_SHORT).show()
+                }
+            }
+            // Nota: Si success es true, no hacemos nada más aquí; el callback se encargará de refrescar.
+        }
     }
 
     private fun checkPermissions() {

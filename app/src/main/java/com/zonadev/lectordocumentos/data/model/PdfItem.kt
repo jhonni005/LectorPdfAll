@@ -10,6 +10,7 @@ data class PdfItem(
     val uri: Uri,
     val lastModified: Long,
     val size: Long,
+    val path: String,
     // Este campo ya viene listo del repositorio ("12 mar. 2023 - 4 MB")
     // para que la UI no pierda tiempo calculando.
     val details: String

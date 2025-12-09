@@ -53,6 +53,11 @@ android {
 
 dependencies {
 
+
+
+    implementation ("androidx.documentfile:documentfile:1.0.1")
+
+
     implementation ("androidx.paging:paging-runtime:3.3.0")
     implementation ("androidx.paging:paging-compose:3.3.0")
 
