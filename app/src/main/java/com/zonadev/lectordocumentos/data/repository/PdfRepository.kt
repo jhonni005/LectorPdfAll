@@ -24,11 +24,11 @@ class PdfRepository(private val context: Context) {
     fun getPdfPager(sortOption: PdfSortOption, query: String): Flow<PagingData<PdfItem>> {
         return Pager(
             config = PagingConfig(
-                pageSize = 30,        // Carga bloques de 20 en 20 (Muy rápido y ligero en RAM)
+                pageSize = 50,        // Carga bloques de 20 en 20 (Muy rápido y ligero en RAM)
                 enablePlaceholders = false, // No mostramos "huecos" vacíos
-                prefetchDistance = 5, // Empieza a cargar la siguiente página cuando falten 10 items
-                initialLoadSize = 30,   // La primera carga también es pequeña para que la app abra al instante
-                maxSize = 200
+                prefetchDistance = 12, // Empieza a cargar la siguiente página cuando falten 10 items
+                initialLoadSize = 100,   // La primera carga también es pequeña para que la app abra al instante
+                maxSize = 300
 
             ),
             pagingSourceFactory = {
@@ -38,6 +38,19 @@ class PdfRepository(private val context: Context) {
             }
         ).flow
     }
+
+
+
+    /*ESTABLE CON DELAY Y MUY RAPIDO
+      config = PagingConfig(
+                pageSize = 30,        // Carga bloques de 20 en 20 (Muy rápido y ligero en RAM)
+                enablePlaceholders = false, // No mostramos "huecos" vacíos
+                prefetchDistance = 5, // Empieza a cargar la siguiente página cuando falten 10 items
+                initialLoadSize = 30,   // La primera carga también es pequeña para que la app abra al instante
+                maxSize = 200
+
+            ),
+    **/
 
 
 // --- 2. RENOMBRADO HÍBRIDO (La Solución Definitiva) ---

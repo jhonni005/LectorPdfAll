@@ -34,7 +34,7 @@ android {
 
             // TRUCO: Usar la firma de debug para poder darle al botón "Play"
             // y que se instale sin pedirte contraseñas.
-            // signingConfig = signingConfigs.getByName("debug")
+          //  signingConfig = signingConfigs.getByName("debug")
         }
     }
 

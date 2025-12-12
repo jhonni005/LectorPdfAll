@@ -1,4 +1,4 @@
-package com.zonadev.lectordocumentos.ui.screens.home
+package com.zonadev.lectordocumentos.ui.screens.search
 
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -32,6 +32,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -43,9 +44,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.zonadev.lectordocumentos.data.model.PdfItem
 // IMPORTANTE: Asegúrate de importar el ViewModel independiente
-import com.zonadev.lectordocumentos.ui.screens.search.PdfSearchViewModel
 import kotlinx.coroutines.android.awaitFrame
-import kotlinx.coroutines.delay
 
 @Composable
 fun PdfSearchScreen(
@@ -192,7 +191,7 @@ fun PdfSearchRow(
 }
 
 @Composable
-fun buildHighlightedString(fullText: String, query: String): androidx.compose.ui.text.AnnotatedString {
+fun buildHighlightedString(fullText: String, query: String): AnnotatedString {
     if (query.isBlank()) return androidx.compose.ui.text.AnnotatedString(fullText)
 
     return buildAnnotatedString {

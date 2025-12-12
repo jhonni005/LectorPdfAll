@@ -22,6 +22,7 @@ import java.io.IOException
 import kotlin.math.min
 import androidx.core.graphics.createBitmap
 
+
 class PdfViewerViewModel(application: Application) : AndroidViewModel(application) {
 
     data class ViewerUiState(

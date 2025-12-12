@@ -92,7 +92,7 @@ private fun DetailItem(
     Column {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium, // Estilo pequeño para el subtitulo
+            style = MaterialTheme.typography.titleMedium, // Estilo pequeño para el subtitulo
             fontWeight = FontWeight.SemiBold,
             color = labelColor
         )

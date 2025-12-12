@@ -4,10 +4,7 @@ import android.net.Uri
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.core.net.toUri
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -15,7 +12,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.zonadev.lectordocumentos.ui.screens.home.PdfAppEntry
 import com.zonadev.lectordocumentos.ui.screens.home.PdfListViewModel
-import com.zonadev.lectordocumentos.ui.screens.home.PdfSearchScreen
+import com.zonadev.lectordocumentos.ui.screens.search.PdfSearchScreen
 import com.zonadev.lectordocumentos.ui.screens.viewer.PdfViewerScreen
 
 

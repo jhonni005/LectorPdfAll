@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,6 +38,8 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
     // Cadena manual para evitar error de referencia en algunas versiones de compilador
     private val OP_MANAGE_EXTERNAL_STORAGE = "android:manage_external_storage"
 
+    var lastScrollIndex: Int? = null
+    var lastScrollOffset: Int? = null
     // Estado UI (Solo Permisos y carga inicial de permisos)
     // Nota: La lista de PDFs ya no está aquí, vive en el Flow 'pagedPdfList'
     data class PdfListUiState(
@@ -72,7 +75,6 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
     fun hidePdfOptions() {
         _selectedPdfForOptions.value = null
     }
-
     // --- FLUJO PAGINADO MAESTRO ---
     // Esta es la clave del rendimiento. Combina (Búsqueda + Orden).
     // Si escribes una letra o cambias el orden, 'flatMapLatest' cancela la carga anterior
