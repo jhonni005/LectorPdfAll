@@ -8,6 +8,7 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.zonadev.lectordocumentos.data.model.PdfItem
 import com.zonadev.lectordocumentos.data.model.PdfSortOption
+import com.zonadev.lectordocumentos.data.model.PdfTab
 import com.zonadev.lectordocumentos.data.repository.PdfRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -28,7 +29,8 @@ class PdfSearchViewModel(application: Application) : AndroidViewModel(applicatio
     // Usamos flatMapLatest: cada vez que cambia el texto, cancela la búsqueda anterior
     // y lanza una nueva consulta paginada.
     @OptIn(ExperimentalCoroutinesApi::class)
-    val searchResults: Flow<PagingData<PdfItem>> = _searchText.flatMapLatest { tfv ->
+    val searchResults: Flow<PagingData<PdfItem>> =
+        _searchText.flatMapLatest { tfv ->
         val query = tfv.text.trim()
 
         if (query.isBlank()) {
@@ -37,7 +39,11 @@ class PdfSearchViewModel(application: Application) : AndroidViewModel(applicatio
         } else {
             // Si hay texto, buscamos.
             // Usamos un orden por defecto (ej. Fecha) para los resultados.
-            repository.getPdfPager(PdfSortOption.DATE_DESC, query)
+            repository.getPdfPager(
+                tab = PdfTab.All,
+                sortOption = PdfSortOption.DATE_DESC,
+                query = query
+            )
         }
     }.cachedIn(viewModelScope) // Mantiene el estado de la paginación mientras el VM viva
 

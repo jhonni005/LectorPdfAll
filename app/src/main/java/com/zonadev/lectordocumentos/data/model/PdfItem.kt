@@ -13,5 +13,6 @@ data class PdfItem(
     val path: String,
     // Este campo ya viene listo del repositorio ("12 mar. 2023 - 4 MB")
     // para que la UI no pierda tiempo calculando.
-    val details: String
+    val details: String,
+    val isFavorite: Boolean
 )

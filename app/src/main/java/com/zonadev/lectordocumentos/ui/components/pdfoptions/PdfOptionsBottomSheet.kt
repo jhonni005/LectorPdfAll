@@ -44,6 +44,7 @@ import com.zonadev.lectordocumentos.data.model.PdfItem
 @Composable
 fun PdfOptionsBottomSheet(
     pdf: PdfItem,
+    isCurrentlyFavorite: Boolean,
     onDismiss: () -> Unit,
     onShare: () -> Unit,
     onRename: () -> Unit,
@@ -52,7 +53,6 @@ fun PdfOptionsBottomSheet(
     onToggleFavorite: (Boolean) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var isSaved by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -99,15 +99,11 @@ fun PdfOptionsBottomSheet(
                     )
                 }
 
-                IconButton(onClick = {
-                    isSaved = !isSaved
-                    onToggleFavorite(isSaved)
-                }) {
+                IconButton(onClick = { onToggleFavorite(!isCurrentlyFavorite) }) {
                     Icon(
-                        imageVector = if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        imageVector = if (isCurrentlyFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                         contentDescription = "Favorito",
-                        // Rojo si está guardado, gris adaptable si no
-                        tint = if (isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (isCurrentlyFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(28.dp)
                     )
                 }

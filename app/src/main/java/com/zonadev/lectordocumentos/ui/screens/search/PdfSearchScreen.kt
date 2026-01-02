@@ -72,9 +72,7 @@ fun PdfSearchScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding()
-                    .padding(8.dp),
+                    .background(MaterialTheme.colorScheme.surface),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Botón Atrás: Solo navega. No necesitamos limpiar el texto manualmente

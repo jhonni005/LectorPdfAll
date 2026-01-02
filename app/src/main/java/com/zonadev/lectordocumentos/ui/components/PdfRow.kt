@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,7 +32,8 @@ fun PdfRow(
     namePdf: String,
     pdfDetails: String, // Recibe el texto ya listo ("12 mar - 4MB")
     onClick: () -> Unit,
-    onMoreOptionsClick: () -> Unit = {}
+    onMoreOptionsClick: () -> Unit = {},
+    isFavorite: Boolean
 ) {
     Column {
         Row(
@@ -74,6 +75,16 @@ fun PdfRow(
                     color = Color.Gray
                 )
             }
+            if (isFavorite) {
+                Icon(
+                    imageVector = Icons.Default.Bookmark,
+                    contentDescription = "Guardado",
+                    tint = Color.Red,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
 
             // 3. Menú de opciones
             IconButton(onClick = onMoreOptionsClick) {

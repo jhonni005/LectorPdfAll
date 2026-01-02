@@ -5,49 +5,25 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.paging.LoadState
-import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
-import androidx.paging.compose.itemKey
 import com.zonadev.lectordocumentos.core.PermissionHelper
 import com.zonadev.lectordocumentos.core.ShareHelper
 import com.zonadev.lectordocumentos.data.model.PdfItem
-import com.zonadev.lectordocumentos.data.model.PdfTab
 import com.zonadev.lectordocumentos.ui.components.DeletePdfDialog
 import com.zonadev.lectordocumentos.ui.components.PdfDetailsDialog
 import com.zonadev.lectordocumentos.ui.components.pdfoptions.PdfOptionsBottomSheet
-import com.zonadev.lectordocumentos.ui.components.PdfRow
-import com.zonadev.lectordocumentos.ui.components.PermissionCard
 import com.zonadev.lectordocumentos.ui.components.RenamePdfDialog
 import com.zonadev.lectordocumentos.ui.components.SortBottomSheetContent
-import com.zonadev.lectordocumentos.ui.utils.StableTopPadding
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 
@@ -63,7 +39,7 @@ fun PdfAppEntry(
     val currentSortOption by viewModel.sortOption.collectAsState()
     val currentTab by viewModel.currentTab.collectAsState()
     val selectedPdf by viewModel.selectedPdfForOptions.collectAsState()
-
+    val isCurrentlyFavorite by viewModel.isPdfFavorite.collectAsState()
     // Recolectamos el flujo Paging 3 aquí
     val pagedPdfs = viewModel.pagedPdfList.collectAsLazyPagingItems()
 
@@ -151,12 +127,10 @@ fun PdfAppEntry(
     }
 
     // Llamamos a la pantalla visual
-    PdfListScreen(
+    /*PdfListScreen(
         pagedPdfs = pagedPdfs,
         needsPermission = state.needsPermission,
         isPermissionSkipped = state.isPermissionSkipped,
-        currentTab = currentTab,
-        listState = listState,
         onRefresh = {
             viewModel.refresh()
             pagedPdfs.refresh()
@@ -175,15 +149,15 @@ fun PdfAppEntry(
         },
         onSkipPermission = { viewModel.skipPermissionRequest() },
         onOpenPdf = { uri->
-            onOpenPdf(uri)
+          //  onOpenPdf(uri)
             saveScrollPosition()
         },
-        onSearchClick = onSearchClick,
-        onSortClick = { showSortSheet = true },
         onMoreOptionsClick = { pdf ->
             viewModel.showPdfOptions(pdf)
-        }
-    )
+        },
+        listState = listState,
+        favoriteIds = 0
+    )*/
 
     // --- AQUÍ LLAMAMOS A TU COMPONENTE ---
 
@@ -215,7 +189,7 @@ fun PdfAppEntry(
         PdfOptionsBottomSheet(
             pdf = selectedPdf!!,
             onDismiss = { viewModel.hidePdfOptions() },
-            onShare = { ShareHelper.sharePdf(context,pdf) },
+            onShare = { ShareHelper.sharePdf(context, pdf) },
             onRename = {
                 pdfToRename = selectedPdf
                 viewModel.hidePdfOptions()
@@ -228,7 +202,8 @@ fun PdfAppEntry(
                 pdfToDelete = pdf
                 viewModel.hidePdfOptions()
             },
-            onToggleFavorite = { isFav -> /* Implementar logica favoritos */ }
+            onToggleFavorite = { viewModel.toggleFavorite(pdf, it) },
+            isCurrentlyFavorite = isCurrentlyFavorite
         )
     }
     if (pdfToRename != null) {

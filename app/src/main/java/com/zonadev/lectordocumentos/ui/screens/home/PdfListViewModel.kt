@@ -14,6 +14,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import androidx.paging.map as pagingDataMap // 🔥 ALIAS: Evita colisión con Flow.map
 import com.zonadev.lectordocumentos.core.PermissionHelper
 import com.zonadev.lectordocumentos.data.model.PdfItem
 import com.zonadev.lectordocumentos.data.model.PdfSortOption
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -40,6 +42,12 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
 
     var lastScrollIndex: Int? = null
     var lastScrollOffset: Int? = null
+    var isRestoringScroll = false
+
+    private val _isPdfFavorite = MutableStateFlow(false)
+    val isPdfFavorite: StateFlow<Boolean> = _isPdfFavorite.asStateFlow()
+
+
     // Estado UI (Solo Permisos y carga inicial de permisos)
     // Nota: La lista de PDFs ya no está aquí, vive en el Flow 'pagedPdfList'
     data class PdfListUiState(
@@ -69,9 +77,11 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
     // Función para abrir el menú
     fun showPdfOptions(pdf: PdfItem) {
         _selectedPdfForOptions.value = pdf
+        viewModelScope.launch(Dispatchers.IO) {
+            _isPdfFavorite.value = repository.getFavoriteStatus(pdf.id)
+        }
     }
 
-    // Función para cerrar el menú
     fun hidePdfOptions() {
         _selectedPdfForOptions.value = null
     }
@@ -83,14 +93,25 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
     val pagedPdfList: Flow<PagingData<PdfItem>> = combine(
         _sortOption,
         _currentTab,
-        _refreshTrigger
-    ) { sort , tab, _ ->
-        Pair(sort, tab)
-    }.flatMapLatest { (sort, tab) ->
-        // Llamamos al repositorio que crea el PagingSource con la query SQL exacta
-        repository.getPdfPager(sort, query = "")
-    }
-        .cachedIn(viewModelScope) // Cachear en ViewModel para sobrevivir rotaciones de pantalla
+        _refreshTrigger,
+        repository.getFavoriteIdsFlow()
+    ) { sort, tab, _, favoriteIds ->
+        DataRequest(sort, tab, favoriteIds)
+    }.flatMapLatest { request ->
+        // 1. Obtenemos el flujo de PagingData
+        repository.getPdfPager(request.tab, request.sort, query = "")
+            .map { pagingData ->
+                // 2. Usamos el ALIAS 'pagingDataMap' para transformar los items
+                // Esto garantiza que el compilador sepa que 'pdf' es un PdfItem
+                pagingData.pagingDataMap { pdf ->
+                    pdf.copy(isFavorite = request.favoriteIds.contains(pdf.id))
+                }
+            }
+    }.cachedIn(viewModelScope)
+
+
+
+    data class DataRequest(val sort: PdfSortOption, val tab: PdfTab, val favoriteIds: Set<Long>)
 
     fun updateSortOption(newOption: PdfSortOption) {
         _sortOption.value = newOption
@@ -119,6 +140,7 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO){
             val success = repository.deletePdf(pdf.uri)
             if (success){
+                repository.deleteFromRoom(pdf.id)
                 _refreshTrigger.value+=1
             }else{
                 withContext(Dispatchers.Main){
@@ -127,6 +149,13 @@ class PdfListViewModel(application: Application) : AndroidViewModel(application)
             }
         }
 
+    }
+
+    fun toggleFavorite(pdf: PdfItem, isFavorite: Boolean) {
+        viewModelScope.launch {
+            repository.toggleFavorite(pdf, isFavorite)
+            _isPdfFavorite.value = isFavorite
+        }
     }
 
 

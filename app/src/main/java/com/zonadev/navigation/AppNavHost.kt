@@ -5,44 +5,100 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.core.net.toUri
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.zonadev.lectordocumentos.ui.screens.home.PdfAppEntry
-import com.zonadev.lectordocumentos.ui.screens.home.PdfListViewModel
+import com.zonadev.lectordocumentos.data.model.PdfTab
+import com.zonadev.lectordocumentos.ui.screens.home.AllPdfsEntry
+import com.zonadev.lectordocumentos.ui.screens.home.AllPdfsViewModel
+import com.zonadev.lectordocumentos.ui.screens.home.PdfRecentScreen
+import com.zonadev.lectordocumentos.ui.screens.home.PdfRecentViewModel
+import com.zonadev.lectordocumentos.ui.screens.home.PdfSavedScreen
+import com.zonadev.lectordocumentos.ui.screens.home.PdfSavedViewModel
 import com.zonadev.lectordocumentos.ui.screens.search.PdfSearchScreen
+import com.zonadev.lectordocumentos.ui.screens.tools.PdfTools
 import com.zonadev.lectordocumentos.ui.screens.viewer.PdfViewerScreen
 
 
 @Composable
 fun AppNavHost(
     navController: NavHostController,
-    sharedViewModel: PdfListViewModel
+    allPdfsViewModel: AllPdfsViewModel,
+    savedPdfsViewModel: PdfSavedViewModel
 ) {
     NavHost(
         navController = navController,
-        startDestination = "list",
+        startDestination = PdfTab.All.route,
     ) {
         // --- Pantalla 1: Lista de PDFs ---
         composable(
-            route = "list",
+            route = PdfTab.All.route,
+            enterTransition = { EnterTransition.None },
             exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None }
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
-            PdfAppEntry(
-                viewModel = sharedViewModel,
+            AllPdfsEntry(
+                viewModel = allPdfsViewModel,
                 onOpenPdf = { uri ->
                     val encoded = Uri.encode(uri.toString())
-                    navController.navigate("viewer?uri=$encoded")
+                    navController.navigate("viewer?uri=$encoded") {
+                        // restoreState = true
+                    }
                 },
-                onSearchClick = {
-                    //navegamos a la pantalal de busqueda
-                    navController.navigate("search")
-                }
+
+                )
+        }
+
+        composable(
+            PdfTab.Recent.route,
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
+        ) {
+            val recentViewModel: PdfRecentViewModel = viewModel()
+            PdfRecentScreen(
+                onOpenPdf = { uri ->
+                    val encoded = Uri.encode(uri.toString())
+                    navController.navigate("viewer?uri=$encoded") {
+                        // restoreState = true
+                    }
+                },
+                onSearchClick = {},
+                viewModel = recentViewModel
             )
         }
+
+        composable(
+            PdfTab.Saved.route,
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
+        ) {
+            PdfSavedScreen(
+                onOpenPdf = { uri ->
+                    val encoded = Uri.encode(uri.toString())
+                    navController.navigate("viewer?uri=$encoded") {
+                        // restoreState = true
+                    }
+                },
+                viewModel = savedPdfsViewModel
+            )
+        }
+
+        composable(
+            PdfTab.Tools.route, enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }) {
+            PdfTools()
+        }
+
         // --- 2. PANTALLA DE BÚSQUEDA (Nueva) ---
         composable(
             route = "search",
@@ -55,7 +111,7 @@ fun AppNavHost(
             PdfSearchScreen(
                 onBack = {
                     navController.popBackStack()
-                         },
+                },
                 onOpenPdf = { uri ->
                     val encoded = Uri.encode(uri.toString())
                     // Desde la búsqueda también podemos ir directo al visor

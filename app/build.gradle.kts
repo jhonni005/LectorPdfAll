@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -23,8 +24,8 @@ android {
     buildTypes {
         release {
             // Habilita R8 (el optimizador de código de Google)
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
 
             // Reglas de optimización estándar
             proguardFiles(
@@ -34,7 +35,7 @@ android {
 
             // TRUCO: Usar la firma de debug para poder darle al botón "Play"
             // y que se instale sin pedirte contraseñas.
-          //  signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -54,6 +55,11 @@ android {
 dependencies {
 
 
+
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    implementation(libs.androidx.room.paging)
 
     implementation ("androidx.documentfile:documentfile:1.0.1")
 

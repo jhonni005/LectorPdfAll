@@ -84,7 +84,7 @@ private fun PdfViewerContent(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
                     }
                 },
-             //   windowInsets = WindowInsets(0.dp)
+               windowInsets = WindowInsets(0.dp)
             )
         }
     ) { padding ->

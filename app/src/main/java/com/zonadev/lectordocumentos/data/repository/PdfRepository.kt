@@ -1,5 +1,6 @@
 package com.zonadev.lectordocumentos.data.repository
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
@@ -9,53 +10,129 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
+import androidx.paging.map
 import com.zonadev.lectordocumentos.data.datasource.PdfPagingSource
+import com.zonadev.lectordocumentos.data.local.PdfDatabase
+import com.zonadev.lectordocumentos.data.mapper.toLocalPdfEntity
+import com.zonadev.lectordocumentos.data.mapper.toPdfItem
 import com.zonadev.lectordocumentos.data.model.PdfItem
 import com.zonadev.lectordocumentos.data.model.PdfSortOption
+import com.zonadev.lectordocumentos.data.model.PdfTab
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.io.File
-
 
 class PdfRepository(private val context: Context) {
 
-    // Esta función crea el flujo de datos paginados.
-    // Paging 3 se encarga de llamar a tu 'PdfPagingSource' automáticamente
-    // para pedir más datos cuando el usuario hace scroll.
-    fun getPdfPager(sortOption: PdfSortOption, query: String): Flow<PagingData<PdfItem>> {
-        return Pager(
-            config = PagingConfig(
-                pageSize = 50,        // Carga bloques de 20 en 20 (Muy rápido y ligero en RAM)
-                enablePlaceholders = false, // No mostramos "huecos" vacíos
-                prefetchDistance = 12, // Empieza a cargar la siguiente página cuando falten 10 items
-                initialLoadSize = 100,   // La primera carga también es pequeña para que la app abra al instante
-                maxSize = 300
+    private val pdfDao = PdfDatabase.getDatabase(context).pdfDao()
 
-            ),
-            pagingSourceFactory = {
-                // Cada vez que la lista se invalida (nuevo filtro/orden),
-                // se crea una nueva fuente de datos limpia.
-                PdfPagingSource(context, sortOption, query)
+    /**
+     * Esta es la implementación correcta.
+     * Separa MediaStore de Room para garantizar tipos seguros y reactividad.
+     */
+    fun getPdfPager(
+        tab: PdfTab,
+        sortOption: PdfSortOption,
+        query: String
+    ): Flow<PagingData<PdfItem>> {
+
+        // 1. Caso Herramientas: Flow vacío
+        if (tab == PdfTab.Tools) return flowOf(PagingData.empty())
+
+        // 2. Casos de Room (Saved / Recent): Paginación directa desde BD
+        if (tab != PdfTab.All) {
+            return Pager(
+                config = PagingConfig(
+                    pageSize = 50,
+                    enablePlaceholders = false,
+                    prefetchDistance = 12
+                ),
+                pagingSourceFactory = {
+                    when (tab) {
+                        PdfTab.Saved -> when (sortOption) {
+                            PdfSortOption.DATE_DESC -> pdfDao.getFavoritesByDateDesc()
+                            PdfSortOption.DATE_ASC -> pdfDao.getFavoritesByDateAsc()
+                            PdfSortOption.NAME_ASC -> pdfDao.getFavoritesByNameAsc()
+                            PdfSortOption.NAME_DESC -> pdfDao.getFavoritesByNameDesc()
+                            PdfSortOption.SIZE_ASC -> pdfDao.getFavoritesBySizeAsc()
+                            PdfSortOption.SIZE_DESC -> pdfDao.getFavoritesBySizeDesc()
+                        }
+
+                        PdfTab.Recent -> pdfDao.getRecentsPaged()
+                        else -> throw IllegalStateException("Tab no soportado")
+                    }
+                }
+            ).flow.map { pagingData ->
+                // IMPORTANTE: Mapeamos la entidad de Room al modelo de la UI
+                pagingData.map { it.toPdfItem() }
             }
-        ).flow
+        }
+
+        // 3. Caso Pestaña TODOS: Combinamos MediaStore
+        return flow {
+
+            val pagerFlow = Pager(
+                config = PagingConfig(
+                    pageSize = 50,
+                    enablePlaceholders = false,
+                    prefetchDistance = 12,
+                    initialLoadSize = 100,
+                    maxSize = 300
+                ),
+                pagingSourceFactory = {
+                    // Pasamos los IDs reales para que el icono de favorito salga bien
+                    PdfPagingSource(context, sortOption, query)
+                }
+            ).flow
+
+            // 🔥 CORRECTO: Usamos emitAll para que el Flow del Pager siga vivo y reactivo
+            emitAll(pagerFlow)
+        }
     }
 
 
+    fun getFavoriteIdsFlow(): Flow<Set<Long>> = pdfDao.getAllFavoriteIdsFlow()
+        .map { list -> list.toSet() }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.IO)
 
-    /*ESTABLE CON DELAY Y MUY RAPIDO
-      config = PagingConfig(
-                pageSize = 30,        // Carga bloques de 20 en 20 (Muy rápido y ligero en RAM)
-                enablePlaceholders = false, // No mostramos "huecos" vacíos
-                prefetchDistance = 5, // Empieza a cargar la siguiente página cuando falten 10 items
-                initialLoadSize = 30,   // La primera carga también es pequeña para que la app abra al instante
-                maxSize = 200
+    suspend fun getFavoriteStatus(id: Long): Boolean = withContext(Dispatchers.IO) {
+        pdfDao.getById(id)?.isFavorite ?: false
+    }
 
-            ),
-    **/
+    suspend fun toggleFavorite(pdf: PdfItem, isFavorrite: Boolean) {
+        val existing = pdfDao.getById(pdf.id)
+
+        if (existing != null) {
+            pdfDao.updateFavorite(pdf.id, isFavorrite)
+        } else {
+            pdfDao.insertOrUpdate(
+                pdf.toLocalPdfEntity(isFavorite = isFavorrite)
+            )
+        }
+    }
 
 
-// --- 2. RENOMBRADO HÍBRIDO (La Solución Definitiva) ---
+    suspend fun markPdfAsOpened(pdf: PdfItem) {
+        val now = System.currentTimeMillis()
+        val existing = pdfDao.getById(pdf.id)
 
-    // --- RENOMBRADO CON CALLBACK (Sin Delay) ---
+        if (existing != null) {
+            pdfDao.updateLastOpened(pdf.id, now)
+        } else {
+            pdfDao.insertOrUpdate(
+                pdf.toLocalPdfEntity(lastOpenedTime = now)
+            )
+        }
+    }
+
 
     fun renamePdf(
         uri: Uri,
@@ -157,9 +234,6 @@ class PdfRepository(private val context: Context) {
         }
     }
 
-    //ELIMINACION DE UN PDF
-
-    // --- 3. ELIMINACIÓN (NUEVO) ---
 
     fun deletePdf(uri: Uri): Boolean {
         // Estrategia A: Intentar borrar el archivo físico (Más rápido y limpio)
@@ -206,5 +280,20 @@ class PdfRepository(private val context: Context) {
         }
     }
 
+    //Delete from Room
+    suspend fun deleteFromRoom(id: Long) {
+        pdfDao.deleteById(id)
 
+    }
+
+
+    // 🔥 NUEVO: Obtiene el ID del MediaStore (necesario para Room)
+    private fun getMediaIdFromUri(contentUri: Uri): Long? {
+        // Intenta obtener el ID directamente de la URI
+        return try {
+            ContentUris.parseId(contentUri)
+        } catch (e: Exception) {
+            null
+        }
+    }
 }

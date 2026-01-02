@@ -10,6 +10,7 @@ import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import com.zonadev.lectordocumentos.data.model.PdfItem
 import com.zonadev.lectordocumentos.data.model.PdfSortOption
+import com.zonadev.lectordocumentos.ui.utils.PdfFormatUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -19,7 +20,7 @@ import java.util.Locale
 class PdfPagingSource(
     private val context: Context,
     private val sortOption: PdfSortOption,
-    private val query: String
+    private val query: String,
 ) : PagingSource<Int, PdfItem>() {
 
     override fun getRefreshKey(state: PagingState<Int, PdfItem>): Int? {
@@ -32,10 +33,6 @@ class PdfPagingSource(
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, PdfItem> {
         // Ejecutamos explícitamente en IO para liberar al hilo principal
         return withContext(Dispatchers.IO) {
-            // 1. OPTIMIZACIÓN: Creamos el formateador AQUÍ (Local).
-            // SimpleDateFormat no es thread-safe. Usarlo como variable de clase causa bloqueos en Paging 3.
-            // Al ser local, cada hilo tiene el suyo y vuela.
-            val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale("es", "ES"))
 
             try {
                 val page = params.key ?: 0
@@ -116,12 +113,8 @@ class PdfPagingSource(
                         val uri = ContentUris.withAppendedId(queryUri, id)
 
                         // Pre-cálculo seguro
-                        val dateStr = try {
-                            dateFormatter.format(dateMillis)
-                        } catch (e: Exception) {
-                            ""
-                        }
-                        val sizeStr = formatSize(sizeBytes)
+                        val dateStr = PdfFormatUtils.formatDate(dateMillis)
+                        val sizeStr = PdfFormatUtils.formatSize(sizeBytes)
                         val detailsFinal = "$dateStr - $sizeStr"
 
                         pdfList.add(
@@ -132,7 +125,8 @@ class PdfPagingSource(
                                 lastModified = dateMillis,
                                 size = sizeBytes,
                                 path = realPath,
-                                details = detailsFinal
+                                details = detailsFinal,
+                                isFavorite = false
                             )
                         )
                     }
@@ -153,14 +147,4 @@ class PdfPagingSource(
         }
     }
 
-    // Función estática simple, muy rápida
-    private fun formatSize(bytes: Long): String {
-        if (bytes <= 0) return "0 KB"
-        val kb = bytes / 1024.0
-        val mb = kb / 1024.0
-        return when {
-            mb >= 1.0 -> String.format("%.1f MB", mb)
-            else -> String.format("%.0f KB", kb)
-        }
-    }
 }
